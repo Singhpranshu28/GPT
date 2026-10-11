@@ -87,7 +87,7 @@ You don't need to copy any client ID into the app. Google matches the app by pac
 
 ## Install on your phone
 
-1. **Download the APK:** on GitHub, open **Actions → Android build**, then the latest green run. Under **Artifacts**, download **flow-notes-debug-apk**. GitHub delivers it as a `.zip`. Unzip it to get `app-debug.apk`. The easiest way is to do this on the phone, with the Files app.
+1. **Download the APK:** on your phone, open **https://github.com/Singhpranshu28/GPT/releases/latest/download/flow-notes.apk**. This link always points to the newest build of `main`. All builds are listed on the [Releases page](https://github.com/Singhpranshu28/GPT/releases).
 2. **Allow installs from your browser or file manager:** open the APK. Android asks you to allow "Install unknown apps" for the browser or Files app you opened it from. Turn that on and go back.
 3. **Install:** tap **Install**. If Play Protect warns that the app is unknown, tap **More details → Install anyway**. That warning is normal for apps that don't come from the Play Store.
 4. Open **Flow Notes** and allow the microphone and notifications.

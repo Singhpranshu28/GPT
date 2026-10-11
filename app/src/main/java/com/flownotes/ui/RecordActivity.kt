@@ -62,6 +62,7 @@ import com.flownotes.recording.NoteProcessor
 import com.flownotes.recording.RecordingBus
 import com.flownotes.recording.RecordingService
 import com.flownotes.recording.RecordingState
+import com.flownotes.reminders.Reminders
 import com.flownotes.ui.theme.FlowNotesTheme
 import kotlinx.coroutines.delay
 
@@ -309,6 +310,19 @@ private fun Done(state: RecordingState.Done, onOpen: (String) -> Unit, onDismiss
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth(),
     )
+    state.reminderText?.let { text ->
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "⏰ " + text + " · " + (state.reminderAt?.let { Reminders.format(it) } ?: "no time given, set one in the note"),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    state.hint?.let {
+        Spacer(Modifier.height(6.dp))
+        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     Spacer(Modifier.height(16.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = onDismiss) { Text("Done") }

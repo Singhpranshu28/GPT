@@ -8,7 +8,14 @@ sealed interface RecordingState {
     data object Idle : RecordingState
     data class Recording(val startedAt: Long, val level: Float = 0f) : RecordingState
     data class Processing(val noteId: String, val stage: String) : RecordingState
-    data class Done(val noteId: String, val title: String, val preview: String) : RecordingState
+    data class Done(
+        val noteId: String,
+        val title: String,
+        val preview: String,
+        val reminderText: String? = null,
+        val reminderAt: Long? = null,
+        val hint: String? = null,
+    ) : RecordingState
     data class Failed(val noteId: String?, val message: String) : RecordingState
 }
 

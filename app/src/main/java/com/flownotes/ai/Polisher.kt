@@ -13,12 +13,17 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import java.time.ZonedDateTime
 
 @Serializable
 data class PolishedNote(
     val title: String,
     val body: String,
     val tags: List<String> = emptyList(),
+    /** What to be reminded of, if the speaker asked for a reminder; otherwise empty. */
+    val reminderText: String = "",
+    /** Local date-time "YYYY-MM-DDTHH:MM" for the reminder; empty if none or no time was given. */
+    val reminderAt: String = "",
 )
 
 /** Turns a raw transcript into clean, intended text with Claude. */
@@ -27,14 +32,14 @@ class Polisher {
     private var clientKey: String? = null
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun polish(transcript: String, settings: Settings): PolishedNote = withContext(Dispatchers.IO) {
+    suspend fun polish(transcript: String, settings: Settings, now: ZonedDateTime): PolishedNote = withContext(Dispatchers.IO) {
         require(settings.anthropicApiKey.isNotBlank()) { "Add an Anthropic API key in Settings." }
 
         val params = MessageCreateParams.builder()
             .model(settings.claudeModel)
             .maxTokens(16_000L)
             .system(Prompts.SYSTEM)
-            .addUserMessage(Prompts.user(transcript, settings))
+            .addUserMessage(Prompts.user(transcript, settings, now))
             .outputConfig(
                 OutputConfig.builder()
                     // Dictation cleanup is a light task; low effort keeps the wait short.
@@ -74,10 +79,12 @@ class Polisher {
                         "title" to mapOf("type" to "string"),
                         "body" to mapOf("type" to "string"),
                         "tags" to mapOf("type" to "array", "items" to mapOf("type" to "string")),
+                        "reminderText" to mapOf("type" to "string"),
+                        "reminderAt" to mapOf("type" to "string"),
                     ),
                 ),
             )
-            .putAdditionalProperty("required", JsonValue.from(listOf("title", "body", "tags")))
+            .putAdditionalProperty("required", JsonValue.from(listOf("title", "body", "tags", "reminderText", "reminderAt")))
             .putAdditionalProperty("additionalProperties", JsonValue.from(false))
             .build()
     }

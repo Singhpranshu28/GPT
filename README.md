@@ -60,10 +60,28 @@ Recording and processing run in a foreground service. You can switch apps or loc
 
 All models are multilingual. Setting a **Language** (e.g. `hi`, `en`) makes recognition faster and more accurate than auto-detect. On a recent phone, Base transcribes a 1-minute note in roughly 5–15 seconds. Older phones take longer.
 
-Without an Anthropic key, notes get a **free, offline basic clean-up**. It removes "um/uh" and stutters, removes "you know"/"I mean" when used as fillers, drops the sentence before "scratch that", and turns spoken "new paragraph" and "bullet point" into formatting. The full Wispr-style rewrite (understanding self-corrections, reorganising into lists, smart titles and tags) needs Claude:
+**Organising notes is free too.** Under **Settings → Organising notes**, pick one of three engines:
 
-- **Anthropic** (optional, paid per use): uses `claude-opus-5-5` by default, and you can change the model in Settings.
-- **Cloud speech-to-text** (optional): if your phone is slow, switch to **Cloud API** and use OpenAI (`gpt-4o-transcribe`), Groq (`whisper-large-v3-turbo`), or any OpenAI-compatible `/audio/transcriptions` endpoint.
+| Engine | Cost | What you get |
+|---|---|---|
+| **On-device AI** (default) | Free, offline | A small LLM ([Qwen2.5](https://huggingface.co/Qwen), Apache-2.0) runs on the phone through [llama.cpp](https://github.com/ggml-org/llama.cpp). It removes fillers, applies self-corrections ("5… actually 6" → "6"), organises the note into paragraphs and bullet lists, and adds a title, tags and **reminders**. Download **Qwen2.5 1.5B** (1.0 GB, recommended) or **0.5B** (0.4 GB, faster) once. A 1-minute note takes roughly 10–40 seconds to organise. |
+| Claude | Paid per use | Best-quality rewrite through the Anthropic API (`claude-opus-5-5` by default). Needs an API key. |
+| Basic rules | Free, instant | Removes "um/uh", stutters and fillers, drops the sentence before "scratch that", and applies spoken "new paragraph" / "bullet point". No reorganising and no reminders. |
+
+If the AI isn't available or fails, the note still saves, using the basic rules.
+
+### Reminders
+
+Say it while you dictate, for example *"…and remind me to call mom tomorrow at 6"* or *"don't let me forget the rent on Friday"*. The AI fills in the reminder and you get a notification at that time:
+
+- The overlay shows the reminder right away, so you can check the time it picked.
+- On the note, you can **Change** the date and time, **Remove** the reminder, or **Add reminder** yourself.
+- If you name a day but no time, it uses 9:00. If you give no time at all, the note gets a reminder with **Set time**.
+- Reminders survive restarts and are included in the Drive backup.
+- On Android 12+, tap **Settings → Allow on-time reminders**. Without it, Android may deliver reminders a few minutes late.
+
+**Optional paid alternatives:**
+- **Cloud speech-to-text:** if your phone is slow, switch to **Cloud API** and use OpenAI (`gpt-4o-transcribe`), Groq (`whisper-large-v3-turbo`), or any OpenAI-compatible endpoint.
 
 Keys are stored in the app's private storage on the device.
 
@@ -125,7 +143,10 @@ app/src/main/java/com/flownotes/
   audio/       AudioRecorder (16 kHz mono AAC, ~0.5 MB/min)
   stt/         WhisperEngine + WhisperNative (on-device whisper.cpp via JNI), WhisperModels (download), AudioDecoder
   ../cpp/      CMake build of whisper.cpp (pinned) + whisper_jni.cpp
-  ai/          Transcriber (cloud STT), Polisher (Claude), Prompts (the "flow" editing rules), LocalCleaner (free offline clean-up)
+llm/           Android library: CMake build of llama.cpp (pinned) + llama_jni.cpp (grammar-constrained generation)
+  ai/          LocalLlm (on-device Qwen via llama.cpp), Polisher (Claude), Prompts (editing rules + JSON grammar),
+               LocalCleaner (basic offline rules), Transcriber (cloud STT)
+  reminders/   Reminders (AlarmManager), ReminderReceiver (notification), RescheduleReceiver (after reboot)
   data/        Note, NotesRepository (JSON file), SettingsStore
   drive/       GoogleAuth (sign-in + consent), DriveClient (REST), DriveSync (backup: Doc + audio + JSON, and restore)
 ```

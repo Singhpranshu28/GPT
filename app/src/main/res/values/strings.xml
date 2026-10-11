@@ -5,4 +5,6 @@
     <string name="notif_recording">Listening… tap to see, or stop and save</string>
     <string name="notif_processing">Turning your voice into a note…</string>
     <string name="stop_and_save">Stop &amp; save</string>
+    <string name="channel_reminders">Reminders</string>
+    <string name="reminder_done">Done</string>
 </resources>

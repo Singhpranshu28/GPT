@@ -123,7 +123,7 @@ class RecordingService : LifecycleService() {
                 if (result.status == NoteStatus.FAILED) {
                     RecordingState.Failed(result.id, result.error ?: "Something went wrong")
                 } else {
-                    RecordingState.Done(result.id, result.title, result.body)
+                    RecordingState.Done(result.id, result.title, result.body, result.reminderText, result.reminderAt, result.error)
                 },
             )
             processing--

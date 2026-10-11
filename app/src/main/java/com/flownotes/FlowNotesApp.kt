@@ -6,6 +6,10 @@ import android.app.NotificationManager
 import com.flownotes.data.NotesRepository
 import com.flownotes.data.SettingsStore
 import com.flownotes.drive.DriveSync
+import com.flownotes.ai.LlmModel
+import com.flownotes.reminders.Reminders
+import com.flownotes.stt.ModelDownloads
+import com.flownotes.stt.WhisperModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +36,10 @@ class FlowNotesApp : Application() {
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
+        Reminders.createChannel(this)
+        ModelDownloads.refresh(this, WhisperModel.entries + LlmModel.entries)
+        // Alarms are cleared by force-stop too, not only by reboots; re-arming is cheap.
+        Reminders.rescheduleAll(this)
         DriveSync.start(this, scope)
     }
 

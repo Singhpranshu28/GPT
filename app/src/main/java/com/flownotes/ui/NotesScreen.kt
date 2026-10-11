@@ -52,6 +52,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.flownotes.FlowNotesApp
 import com.flownotes.data.Note
 import com.flownotes.data.NoteStatus
+import com.flownotes.data.hasPendingReminder
+import com.flownotes.data.organiseHint
+import com.flownotes.data.setupProblem
+import com.flownotes.reminders.Reminders
+import com.flownotes.stt.ModelDownloads
 import java.text.DateFormat
 import java.util.Date
 
@@ -61,6 +66,8 @@ fun NotesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit, onRecord: () -
     val app = FlowNotesApp.instance
     val notes by app.notes.notes.collectAsStateWithLifecycle()
     val settings by app.settings.settings.collectAsStateWithLifecycle()
+    // Read so the setup card re-checks when a model download finishes.
+    val models = ModelDownloads.states.collectAsStateWithLifecycle().value
     var query by rememberSaveable { mutableStateOf("") }
     val context = LocalContext.current
 
@@ -97,8 +104,12 @@ fun NotesScreen(onOpen: (String) -> Unit, onSettings: () -> Unit, onRecord: () -
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            if (!settings.isConfigured) {
-                item { SetupCard("Add your API keys", "A speech-to-text key is required, Anthropic is used for the clean-up.", "Open settings", onSettings) }
+            val problem = models.let { settings.setupProblem(context) }
+
+            if (problem != null) {
+                item { SetupCard("Finish setup", problem, "Open settings", onSettings) }
+            } else if (settings.organiseHint(context) != null) {
+                item { SetupCard("Organised notes & reminders", settings.organiseHint(context)!!, "Open settings", onSettings) }
             } else if (!isAssistant) {
                 item {
                     SetupCard(
@@ -178,6 +189,9 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
+                if (note.hasPendingReminder) {
+                    AssistChip(onClick = onClick, label = { Text("⏰ " + (note.reminderAt?.let { Reminders.format(it) } ?: "Set time")) })
+                }
                 note.tags.forEach { AssistChip(onClick = {}, label = { Text(it) }) }
             }
         }

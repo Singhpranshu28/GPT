@@ -5,6 +5,7 @@ import com.flownotes.FlowNotesApp
 import com.flownotes.data.Note
 import com.flownotes.data.NoteStatus
 import com.flownotes.data.Settings
+import com.flownotes.reminders.Reminders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,6 +113,7 @@ object DriveSync {
             app.notes.upsert(restoredNote.copy(driveSyncedHash = restoredNote.contentHash))
             restored++
         }
+        Reminders.rescheduleAll(context)
         Status.Synced(System.currentTimeMillis(), restored)
     }
 
@@ -281,5 +283,8 @@ object DriveSync {
         append(DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT).format(Date(note.createdAt)))
         if (note.tags.isNotEmpty()) append("  ·  " + note.tags.joinToString(" ") { "#$it" })
         appendLine()
+        note.reminderText?.let { text ->
+            appendLine("⏰ Reminder: $text" + (note.reminderAt?.let { " · " + Reminders.format(it) } ?: ""))
+        }
     }
 }

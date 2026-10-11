@@ -13,8 +13,26 @@ android {
         applicationId = "com.flownotes"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 3
+        versionName = "0.3.0"
+
+        ndk {
+            // On-device Whisper is built for 64-bit ARM, which covers practically every phone in use.
+            abiFilters += "arm64-v8a"
+        }
+        externalNativeBuild {
+            cmake {
+                // Always optimise whisper.cpp, even in the debug APK we ship: -O0 makes it ~5-10x slower.
+                arguments += listOf("-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     signingConfigs {
@@ -47,6 +65,10 @@ android {
         compose = true
     }
     packaging {
+        // Both native modules ship the same NDK C++ runtime.
+        jniLibs {
+            pickFirsts += "**/libc++_shared.so"
+        }
         resources {
             excludes += setOf(
                 "META-INF/{AL2.0,LGPL2.1}",
@@ -82,6 +104,9 @@ dependencies {
     // Google sign-in + Drive permission (AuthorizationClient)
     implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
+    // On-device LLM (llama.cpp) for organised notes and reminders
+    implementation(project(":llm"))
 
     // Claude API (cleanup / "flow" rewriting of the raw transcript)
     implementation("com.anthropic:anthropic-java:2.34.0")

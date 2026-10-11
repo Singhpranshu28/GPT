@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "FlowNotes"
-include(":app")
+include(":app", ":llm")

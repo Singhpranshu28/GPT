@@ -51,6 +51,7 @@ import com.flownotes.FlowNotesApp
 import com.flownotes.data.NoteStatus
 import com.flownotes.drive.DriveSync
 import com.flownotes.recording.NoteProcessor
+import com.flownotes.reminders.Reminders
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -159,6 +160,7 @@ fun NoteDetailScreen(id: String, onBack: () -> Unit) {
                     },
                 ) { Text(if (downloading) "Downloading recording…" else "Download recording from Drive") }
             }
+            ReminderRow(note, enabled = !busy, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             note.error?.let {
                 Text(
                     it,
@@ -215,6 +217,7 @@ fun NoteDetailScreen(id: String, onBack: () -> Unit) {
                 TextButton(onClick = {
                     confirmDelete = false
                     DriveSync.onDeleted(note, app.scope)
+                    Reminders.cancel(context, note.id)
                     scope.launch { app.notes.delete(id); onBack() }
                 }) { Text("Delete") }
             },

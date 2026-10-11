@@ -1,6 +1,9 @@
 package com.flownotes.ui
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +27,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -52,10 +56,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flownotes.FlowNotesApp
 import com.flownotes.data.CleanupLevel
+import com.flownotes.data.SttEngine
 import com.flownotes.data.Settings
 import com.flownotes.data.WritingStyle
 import com.flownotes.drive.DriveSync
 import com.flownotes.drive.GoogleAuth
+import com.flownotes.ai.LlmModel
+import com.flownotes.ai.LocalLlm
+import com.flownotes.data.CleanupEngine
+import com.flownotes.reminders.Reminders
+import com.flownotes.stt.DownloadableModel
+import com.flownotes.stt.ModelDownloads
+import com.flownotes.stt.WhisperModel
+import com.flownotes.stt.WhisperModels
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -101,28 +114,62 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             HorizontalDivider()
             Section("Speech to text")
-            Text("Any OpenAI-compatible transcription API.", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = s.sttBaseUrl == Settings.OPENAI_BASE_URL,
-                    onClick = { set { it.copy(sttBaseUrl = Settings.OPENAI_BASE_URL, sttModel = Settings.OPENAI_STT_MODEL) } },
-                    label = { Text("OpenAI") },
-                )
-                FilterChip(
-                    selected = s.sttBaseUrl == Settings.GROQ_BASE_URL,
-                    onClick = { set { it.copy(sttBaseUrl = Settings.GROQ_BASE_URL, sttModel = Settings.GROQ_STT_MODEL) } },
-                    label = { Text("Groq (fast, cheap)") },
-                )
+            SttEngine.entries.forEach { engine ->
+                Choice(engine.label, engine.description, s.sttEngine == engine) { set { it.copy(sttEngine = engine) } }
             }
-            SecretField("Transcription API key", s.sttApiKey) { v -> set { it.copy(sttApiKey = v) } }
-            TextSetting("Base URL", s.sttBaseUrl) { v -> set { it.copy(sttBaseUrl = v) } }
-            TextSetting("Model", s.sttModel) { v -> set { it.copy(sttModel = v) } }
+            if (s.sttEngine == SttEngine.ON_DEVICE) {
+                ModelList(
+                    title = "Speech model",
+                    models = WhisperModel.entries,
+                    selected = s.whisperModel,
+                    onSelect = { m -> set { it.copy(whisperModel = m) } },
+                    onDelete = { m -> WhisperModels.delete(context, m) },
+                    footer = "Downloads once, then everything runs offline. Use Wi-Fi for Small.",
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = s.sttBaseUrl == Settings.OPENAI_BASE_URL,
+                        onClick = { set { it.copy(sttBaseUrl = Settings.OPENAI_BASE_URL, sttModel = Settings.OPENAI_STT_MODEL) } },
+                        label = { Text("OpenAI") },
+                    )
+                    FilterChip(
+                        selected = s.sttBaseUrl == Settings.GROQ_BASE_URL,
+                        onClick = { set { it.copy(sttBaseUrl = Settings.GROQ_BASE_URL, sttModel = Settings.GROQ_STT_MODEL) } },
+                        label = { Text("Groq") },
+                    )
+                }
+                SecretField("Transcription API key", s.sttApiKey) { v -> set { it.copy(sttApiKey = v) } }
+                TextSetting("Base URL", s.sttBaseUrl) { v -> set { it.copy(sttBaseUrl = v) } }
+                TextSetting("Model", s.sttModel) { v -> set { it.copy(sttModel = v) } }
+            }
             TextSetting("Language (optional, e.g. en, hi)", s.language) { v -> set { it.copy(language = v) } }
+            Text(
+                "Leave blank to auto-detect. Setting it (e.g. \"hi\" for Hindi) is faster and more accurate on-device.",
+                style = MaterialTheme.typography.bodySmall,
+            )
 
             HorizontalDivider()
-            Section("Clean-up with Claude")
-            SecretField("Anthropic API key", s.anthropicApiKey) { v -> set { it.copy(anthropicApiKey = v) } }
-            TextSetting("Claude model", s.claudeModel) { v -> set { it.copy(claudeModel = v) } }
+            Section("Organising notes")
+            CleanupEngine.entries.forEach { engine ->
+                Choice(engine.label, engine.description, s.cleanupEngine == engine) { set { it.copy(cleanupEngine = engine) } }
+            }
+            when (s.cleanupEngine) {
+                CleanupEngine.ON_DEVICE -> ModelList(
+                    title = "AI model",
+                    models = LlmModel.entries,
+                    selected = s.llmModel,
+                    onSelect = { m -> set { it.copy(llmModel = m) } },
+                    onDelete = { m -> FlowNotesApp.instance.scope.launch { LocalLlm.release(); ModelDownloads.delete(context, m) } },
+                    footer = "Downloads once (Wi-Fi recommended), then works offline. Organising a 1-minute note " +
+                        "takes roughly 10-40 seconds depending on your phone.",
+                )
+                CleanupEngine.CLAUDE -> {
+                    SecretField("Anthropic API key", s.anthropicApiKey) { v -> set { it.copy(anthropicApiKey = v) } }
+                    TextSetting("Claude model", s.claudeModel) { v -> set { it.copy(claudeModel = v) } }
+                }
+                CleanupEngine.BASIC -> Unit
+            }
 
             Text("Clean-up level", fontWeight = FontWeight.Medium)
             CleanupLevel.entries.forEach { level ->
@@ -150,6 +197,27 @@ fun SettingsScreen(onBack: () -> Unit) {
                 minLines = 3,
                 placeholder = { Text("Pranshu\nJist\nKubernetes") },
             )
+
+            HorizontalDivider()
+            Section("Reminders")
+            Text(
+                "Say \"remind me to … tomorrow at 6\" in any note and you'll get a notification then. " +
+                    "Works with the on-device AI or Claude.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!Reminders.canScheduleExact(context)) {
+                OutlinedButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + context.packageName)),
+                        )
+                    }
+                }) { Text("Allow on-time reminders") }
+                Text(
+                    "Without this, Android may deliver reminders a few minutes late.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
 
             HorizontalDivider()
             Section("Recording")
@@ -308,4 +376,58 @@ private fun GoogleDriveSection(account: String, backupAudio: Boolean) {
         }
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+}
+
+@Composable
+private fun <M : DownloadableModel> ModelList(
+    title: String,
+    models: List<M>,
+    selected: M,
+    onSelect: (M) -> Unit,
+    onDelete: (M) -> Unit,
+    footer: String,
+) {
+    val context = LocalContext.current
+    val states by ModelDownloads.states.collectAsStateWithLifecycle()
+
+    Text(title, fontWeight = FontWeight.Medium)
+    models.forEach { model ->
+        val state = states[model.fileName] ?: ModelDownloads.State.NotDownloaded
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected == model, onClick = { onSelect(model) })
+            Column(Modifier.weight(1f)) {
+                Text("${model.label} · ${if (model.sizeMb >= 1000) "%.1f GB".format(model.sizeMb / 1024f) else "${model.sizeMb} MB"}")
+                Text(
+                    when (state) {
+                        is ModelDownloads.State.Downloading -> "Downloading… ${state.percent}%"
+                        is ModelDownloads.State.Failed -> state.message
+                        ModelDownloads.State.Ready -> model.description + " · downloaded"
+                        ModelDownloads.State.NotDownloaded -> model.description
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state is ModelDownloads.State.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                if (state is ModelDownloads.State.Downloading) {
+                    LinearProgressIndicator(
+                        progress = { state.percent / 100f },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+            }
+            when (state) {
+                ModelDownloads.State.Ready -> TextButton(onClick = { onDelete(model) }) { Text("Delete") }
+                is ModelDownloads.State.Downloading -> Unit
+                else -> TextButton(onClick = {
+                    onSelect(model)
+                    // App scope: the download keeps going if you leave Settings.
+                    FlowNotesApp.instance.scope.launch { ModelDownloads.download(context.applicationContext, model) }
+                }) { Text("Download") }
+            }
+        }
+    }
+    Text(footer, style = MaterialTheme.typography.bodySmall)
 }

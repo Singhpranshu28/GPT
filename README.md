@@ -8,10 +8,10 @@ talk ("um, so the meeting is at 5, actually make that 6…")
 long-press again / volume key / tap ✓
         │
         ▼
-speech-to-text (OpenAI gpt-4o-transcribe, Groq Whisper, any OpenAI-compatible API)
+speech-to-text: Whisper on your phone (free, offline), or a cloud API
         │  raw: "um so the meeting is at 5 actually make that 6 and uh bring the deck"
         ▼
-Claude clean-up
+clean-up: free offline rules, or Claude for the full rewrite
         │  note: "The meeting is at 6pm. Bring the deck."
         ▼
 saved as a note (title + tags), copied to the clipboard
@@ -22,7 +22,7 @@ saved as a note (title + tags), copied to the clipboard
 | Wispr Flow | Flow Notes |
 |---|---|
 | Removes "um", "uh", "like", stutters and false starts | Same |
-| Backtracking: "5… actually 6pm" → "6pm" | Same: only the final intent is kept |
+| Backtracking: "5… actually 6pm" → "6pm" | Same, with Claude: only the final intent is kept |
 | Auto-formats lists, paragraphs and emails | Same, plus spoken commands ("new paragraph", "bullet point") |
 | Personal dictionary | One word per line. It is sent to both the speech-to-text model (as a spelling hint) and Claude |
 | Auto Cleanup levels (Light / Medium / High) | Same three levels |
@@ -50,10 +50,38 @@ Recording and processing run in a foreground service. You can switch apps or loc
 
 ## Setup
 
-You need two API keys, added in the app's Settings:
+**It works for free, with no API keys.** By default, speech is transcribed **on your phone** by [Whisper](https://github.com/openai/whisper), using [whisper.cpp](https://github.com/ggml-org/whisper.cpp). Nothing is uploaded and nothing costs money. To set it up, go to **Settings → Speech to text → On this phone (free)** and download a model once. Use Wi-Fi for the bigger ones.
 
-- **Speech to text** (required): an OpenAI key (default model `gpt-4o-transcribe`), or a Groq key (`whisper-large-v3-turbo`, faster and cheaper). Any OpenAI-compatible `/audio/transcriptions` endpoint works, including a self-hosted Whisper server.
-- **Anthropic** (for the clean-up): uses `claude-opus-5-5` by default, and you can change the model in Settings. Without this key, notes still save, but as raw transcripts.
+| Model | Size | Best for |
+|---|---|---|
+| Tiny | 31 MB | Older phones, quick notes |
+| Base (default) | 57 MB | Most phones: good balance of speed and accuracy |
+| Small | 181 MB | Best accuracy, especially for Hindi and Hinglish; about 3–4× slower than Base |
+
+All models are multilingual. Setting a **Language** (e.g. `hi`, `en`) makes recognition faster and more accurate than auto-detect. On a recent phone, Base transcribes a 1-minute note in roughly 5–15 seconds. Older phones take longer.
+
+**Organising notes is free too.** Under **Settings → Organising notes**, pick one of three engines:
+
+| Engine | Cost | What you get |
+|---|---|---|
+| **On-device AI** (default) | Free, offline | A small LLM ([Qwen2.5](https://huggingface.co/Qwen), Apache-2.0) runs on the phone through [llama.cpp](https://github.com/ggml-org/llama.cpp). It removes fillers, applies self-corrections ("5… actually 6" → "6"), organises the note into paragraphs and bullet lists, and adds a title, tags and **reminders**. Download **Qwen2.5 1.5B** (1.0 GB, recommended) or **0.5B** (0.4 GB, faster) once. A 1-minute note takes roughly 10–40 seconds to organise. |
+| Claude | Paid per use | Best-quality rewrite through the Anthropic API (`claude-opus-5-5` by default). Needs an API key. |
+| Basic rules | Free, instant | Removes "um/uh", stutters and fillers, drops the sentence before "scratch that", and applies spoken "new paragraph" / "bullet point". No reorganising and no reminders. |
+
+If the AI isn't available or fails, the note still saves, using the basic rules.
+
+### Reminders
+
+Say it while you dictate, for example *"…and remind me to call mom tomorrow at 6"* or *"don't let me forget the rent on Friday"*. The AI fills in the reminder and you get a notification at that time:
+
+- The overlay shows the reminder right away, so you can check the time it picked.
+- On the note, you can **Change** the date and time, **Remove** the reminder, or **Add reminder** yourself.
+- If you name a day but no time, it uses 9:00. If you give no time at all, the note gets a reminder with **Set time**.
+- Reminders survive restarts and are included in the Drive backup.
+- On Android 12+, tap **Settings → Allow on-time reminders**. Without it, Android may deliver reminders a few minutes late.
+
+**Optional paid alternatives:**
+- **Cloud speech-to-text:** if your phone is slow, switch to **Cloud API** and use OpenAI (`gpt-4o-transcribe`), Groq (`whisper-large-v3-turbo`), or any OpenAI-compatible endpoint.
 
 Keys are stored in the app's private storage on the device.
 
@@ -113,7 +141,12 @@ app/src/main/java/com/flownotes/
   ui/          RecordActivity (overlay), MainActivity, NotesScreen, NoteDetailScreen, SettingsScreen
   recording/   RecordingService (mic + pipeline in the foreground), NoteProcessor, RecordingBus
   audio/       AudioRecorder (16 kHz mono AAC, ~0.5 MB/min)
-  ai/          Transcriber (OpenAI-compatible STT), Polisher (Claude), Prompts (the "flow" editing rules)
+  stt/         WhisperEngine + WhisperNative (on-device whisper.cpp via JNI), WhisperModels (download), AudioDecoder
+  ../cpp/      CMake build of whisper.cpp (pinned) + whisper_jni.cpp
+llm/           Android library: CMake build of llama.cpp (pinned) + llama_jni.cpp (grammar-constrained generation)
+  ai/          LocalLlm (on-device Qwen via llama.cpp), Polisher (Claude), Prompts (editing rules + JSON grammar),
+               LocalCleaner (basic offline rules), Transcriber (cloud STT)
+  reminders/   Reminders (AlarmManager), ReminderReceiver (notification), RescheduleReceiver (after reboot)
   data/        Note, NotesRepository (JSON file), SettingsStore
   drive/       GoogleAuth (sign-in + consent), DriveClient (REST), DriveSync (backup: Doc + audio + JSON, and restore)
 ```

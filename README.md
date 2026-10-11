@@ -55,17 +55,44 @@ You need two API keys, added in the app's Settings:
 - **Speech to text** (required): an OpenAI key (default model `gpt-4o-transcribe`), or a Groq key (`whisper-large-v3-turbo`, faster and cheaper). Any OpenAI-compatible `/audio/transcriptions` endpoint works, including a self-hosted Whisper server.
 - **Anthropic** (for the clean-up): uses `claude-opus-5-5` by default, and you can change the model in Settings. Without this key, notes still save, but as raw transcripts.
 
-Keys are stored in the app's private storage on the device. Audio goes only to the speech-to-text provider you configure, and the transcript goes only to Anthropic.
+Keys are stored in the app's private storage on the device.
 
-## Build and install
+### Google Drive backup (optional)
 
-To get a ready-built APK, open the repo's **Actions** tab, then the latest *Android build* run, and download the **flow-notes-debug-apk** artifact.
+To back up notes, go to **Settings → Sign in with Google**. Each note is then saved as a **Google Doc** in a **"Flow Notes"** folder in your Drive and updated whenever you edit it. Deleting a note moves its Doc to the Drive trash. The app asks only for the `drive.file` permission, so it can see the files it created and nothing else in your Drive.
+
+Google needs a one-time setup before sign-in works, because Google identifies Android apps by package name and signing key:
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) and create a project, for example "Flow Notes".
+2. In **APIs & Services → Library**, enable the **Google Drive API**.
+3. Open **Google Auth Platform**, or **OAuth consent screen** in the older layout:
+   - Set the app type to **External** and fill in the app name and your email.
+   - Under **Audience → Test users**, add the Gmail address you'll sign in with.
+   - Under **Data access**, add the scope `.../auth/drive.file`.
+4. Go to **Clients → Create client → Android** and enter:
+   - Package name: `com.flownotes`
+   - SHA-1: `96:B3:DA:25:F6:33:17:37:1A:54:36:4A:EC:14:58:9B:6E:4C:AF:D7` (the fingerprint of `app/debug.keystore`, which signs every build)
+
+You don't need to copy any client ID into the app. Google matches the app by package name and SHA-1. While the consent screen is in **Testing** mode, Google may ask you to sign in again about once a week, and the app shows a **Sign in again** button when that happens. Publishing the consent screen avoids this, and `drive.file` doesn't require Google's app review. Audio goes only to the speech-to-text provider you configure, and the transcript goes only to Anthropic.
+
+## Install on your phone
+
+1. **Download the APK:** on GitHub, open **Actions → Android build**, then the latest green run. Under **Artifacts**, download **flow-notes-debug-apk**. GitHub delivers it as a `.zip`. Unzip it to get `app-debug.apk`. The easiest way is to do this on the phone, with the Files app.
+2. **Allow installs from your browser or file manager:** open the APK. Android asks you to allow "Install unknown apps" for the browser or Files app you opened it from. Turn that on and go back.
+3. **Install:** tap **Install**. If Play Protect warns that the app is unknown, tap **More details → Install anyway**. That warning is normal for apps that don't come from the Play Store.
+4. Open **Flow Notes** and allow the microphone and notifications.
+5. In **Settings**, add your API keys, then tap **Set as digital assistant** to use the side button.
+
+Updates install over the previous version and keep your notes, because every build is signed with the same key in `app/debug.keystore`.
+
+If you'd rather install from a computer:
 
 To build locally with Android Studio or the Android SDK:
 
 ```bash
-./gradlew assembleDebug
-adb install app/build/outputs/apk/debug/app-debug.apk
+# phone: Settings → About → tap "Build number" 7× → Developer options → USB debugging
+./gradlew assembleDebug            # or use the APK downloaded from Actions
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## Code map
@@ -78,6 +105,7 @@ app/src/main/java/com/flownotes/
   audio/       AudioRecorder (16 kHz mono AAC, ~0.5 MB/min)
   ai/          Transcriber (OpenAI-compatible STT), Polisher (Claude), Prompts (the "flow" editing rules)
   data/        Note, NotesRepository (JSON file), SettingsStore
+  drive/       GoogleAuth (sign-in + drive.file consent), DriveClient (REST), DriveSync (notes → Google Docs)
 ```
 
 The editing behaviour lives in `ai/Prompts.kt`. Tweak it there to change how notes are written.

@@ -17,6 +17,17 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // A fixed, committed debug key: CI-built APKs install over each other, and the SHA-1
+        // registered for Google sign-in stays valid. Use a private key for a Play Store release.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             // The Anthropic SDK and JSON schema handling rely on reflection; keep it simple.
@@ -67,6 +78,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Google sign-in + Drive permission (AuthorizationClient)
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     // Claude API (cleanup / "flow" rewriting of the raw transcript)
     implementation("com.anthropic:anthropic-java:2.34.0")

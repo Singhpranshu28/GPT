@@ -18,7 +18,14 @@ data class Note(
     val audioPath: String? = null,
     val status: NoteStatus = NoteStatus.READY,
     val error: String? = null,
-)
+    /** Google Doc this note is mirrored to, once synced. */
+    val driveFileId: String? = null,
+    /** [contentHash] at the time of the last successful Drive upload. */
+    val driveSyncedHash: String? = null,
+) {
+    val contentHash: String get() = (title + "\u0000" + body + "\u0000" + tags.joinToString(",")).hashCode().toString()
+    val needsDriveSync: Boolean get() = status == NoteStatus.READY && body.isNotBlank() && driveSyncedHash != contentHash
+}
 
 @Serializable
 enum class NoteStatus { PROCESSING, READY, FAILED }

@@ -49,11 +49,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flownotes.FlowNotesApp
 import com.flownotes.data.NoteStatus
+import com.flownotes.drive.DriveSync
 import com.flownotes.recording.NoteProcessor
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.DelicateCoroutinesApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteDetailScreen(id: String, onBack: () -> Unit) {
     val app = FlowNotesApp.instance
@@ -74,22 +74,22 @@ fun NoteDetailScreen(id: String, onBack: () -> Unit) {
     var confirmDelete by remember { mutableStateOf(false) }
     val busy = note.status == NoteStatus.PROCESSING
 
-    // Persist edits when leaving the screen. GlobalScope so the write outlives the composition.
+    // Persist edits when leaving the screen, in the app scope so the write outlives the composition.
     val latest by rememberUpdatedState(Triple(note, title, body))
     DisposableEffect(note.id) {
         onDispose {
             val (n, t, b) = latest
             val stored = app.notes.get(n.id) // null if the note was just deleted
             if (stored != null && stored.status != NoteStatus.PROCESSING && (t != stored.title || b != stored.body)) {
-                GlobalScope.launch { app.notes.upsert(stored.copy(title = t, body = b)) }
+                app.scope.launch { app.notes.modify(n.id) { it.copy(title = t, body = b) } }
             }
         }
     }
 
     fun reprocess(retranscribe: Boolean) {
         // Run outside the screen's scope so leaving the screen doesn't cancel it.
-        GlobalScope.launch {
-            app.notes.get(id)?.let { app.notes.upsert(it.copy(title = title, body = body)) }
+        app.scope.launch {
+            app.notes.modify(id) { it.copy(title = title, body = body) }
             NoteProcessor.process(id, retranscribe = retranscribe)
         }
     }
@@ -195,6 +195,7 @@ fun NoteDetailScreen(id: String, onBack: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
+                    DriveSync.onDeleted(note, app.scope)
                     scope.launch { app.notes.delete(id); onBack() }
                 }) { Text("Delete") }
             },

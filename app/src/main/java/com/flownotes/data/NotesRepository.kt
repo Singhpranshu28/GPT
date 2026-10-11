@@ -31,6 +31,13 @@ class NotesRepository(context: Context) {
         if (i >= 0) list.toMutableList().also { it[i] = note } else listOf(note) + list
     }
 
+    /** Applies [transform] to the latest stored copy, so concurrent edits aren't overwritten. */
+    suspend fun modify(id: String, transform: (Note) -> Note) = update { list ->
+        list.map { if (it.id == id) transform(it) else it }
+    }
+
+    suspend fun modifyAll(transform: (Note) -> Note) = update { list -> list.map(transform) }
+
     suspend fun delete(id: String) = update { list ->
         list.firstOrNull { it.id == id }?.audioPath?.let { File(it).delete() }
         list.filterNot { it.id == id }

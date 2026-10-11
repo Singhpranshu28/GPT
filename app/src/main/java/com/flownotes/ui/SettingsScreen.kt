@@ -1,5 +1,9 @@
 package com.flownotes.ui
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -32,6 +37,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +53,11 @@ import com.flownotes.FlowNotesApp
 import com.flownotes.data.CleanupLevel
 import com.flownotes.data.Settings
 import com.flownotes.data.WritingStyle
+import com.flownotes.drive.DriveSync
+import com.flownotes.drive.GoogleAuth
+import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -82,6 +94,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             OutlinedButton(onClick = { openAssistantSettings(context) }) {
                 Text(if (isDefaultAssistant(context)) "Flow Notes is your assistant ✓" else "Set as digital assistant")
             }
+
+            HorizontalDivider()
+            GoogleDriveSection(s.googleAccount)
 
             HorizontalDivider()
             Section("Speech to text")
@@ -200,4 +215,81 @@ private fun Choice(title: String, description: String, selected: Boolean, onClic
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun GoogleDriveSection(account: String) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val status by DriveSync.status.collectAsStateWithLifecycle()
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun signedIn(email: String?) {
+        scope.launch {
+            DriveSync.onSignedIn(email ?: "Google account")
+            DriveSync.syncAll(context)
+        }
+    }
+
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        if (res.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        runCatching { GoogleAuth.fromConsentIntent(context, res.data) }
+            .onSuccess { if (it is GoogleAuth.Result.Authorized) signedIn(it.email) }
+            .onFailure { error = it.message }
+    }
+
+    fun signIn() {
+        error = null
+        scope.launch {
+            runCatching { GoogleAuth.authorize(context) }
+                .onSuccess { r ->
+                    when (r) {
+                        is GoogleAuth.Result.Authorized -> signedIn(r.email)
+                        is GoogleAuth.Result.NeedsConsent ->
+                            consent.launch(IntentSenderRequest.Builder(r.pendingIntent.intentSender).build())
+                    }
+                }
+                .onFailure { error = "Google sign-in failed: ${it.message}" }
+        }
+    }
+
+    Section("Google Drive backup")
+    if (account.isBlank()) {
+        Text(
+            "Sign in with Google to save every note as a Google Doc in a \"Flow Notes\" folder in your Drive. " +
+                "The app can only see files it creates, nothing else in your Drive.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Button(onClick = ::signIn) { Text("Sign in with Google") }
+    } else {
+        Text("Signed in as $account", fontWeight = FontWeight.Medium)
+        Text(
+            when (val st = status) {
+                DriveSync.Status.Off, DriveSync.Status.Idle -> "Notes sync to Drive automatically."
+                DriveSync.Status.Syncing -> "Syncing…"
+                is DriveSync.Status.Synced ->
+                    "Up to date · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(st.at))
+                DriveSync.Status.NeedsSignIn -> "Google needs you to sign in again."
+                is DriveSync.Status.Error -> "Last sync failed: ${st.message}"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (status is DriveSync.Status.Error || status == DriveSync.Status.NeedsSignIn) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (status == DriveSync.Status.NeedsSignIn) {
+                Button(onClick = ::signIn) { Text("Sign in again") }
+            } else {
+                OutlinedButton(
+                    enabled = status != DriveSync.Status.Syncing,
+                    onClick = { scope.launch { DriveSync.syncAll(context) } },
+                ) { Text("Sync now") }
+            }
+            OutlinedButton(onClick = { DriveSync.signOut() }) { Text("Sign out") }
+        }
+    }
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 }

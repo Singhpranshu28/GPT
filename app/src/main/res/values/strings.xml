@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Flow Notes</string>
+    <string name="tile_label">New voice note</string>
+    <string name="channel_recording">Recording</string>
+    <string name="notif_recording">Listening… tap to see, or stop and save</string>
+    <string name="notif_processing">Turning your voice into a note…</string>
+    <string name="stop_and_save">Stop &amp; save</string>
+</resources>

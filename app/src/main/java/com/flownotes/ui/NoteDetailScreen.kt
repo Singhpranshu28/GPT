@@ -140,6 +140,25 @@ fun NoteDetailScreen(id: String, onBack: () -> Unit) {
                 colors = plain,
                 modifier = Modifier.fillMaxWidth(),
             )
+            val audioFile = note.audioPath?.takeIf { java.io.File(it).exists() }
+            if (audioFile != null) {
+                AudioPlayer(audioFile, note.durationMs, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            } else if (note.driveAudioId != null) {
+                var downloading by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    enabled = !downloading,
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    onClick = {
+                        downloading = true
+                        scope.launch {
+                            DriveSync.downloadAudio(context, note.id)?.let {
+                                Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+                            }
+                            downloading = false
+                        }
+                    },
+                ) { Text(if (downloading) "Downloading recording…" else "Download recording from Drive") }
+            }
             note.error?.let {
                 Text(
                     it,
@@ -163,7 +182,7 @@ fun NoteDetailScreen(id: String, onBack: () -> Unit) {
                 if (note.rawTranscript.isNotBlank()) {
                     OutlinedButton(enabled = !busy, onClick = { reprocess(retranscribe = false) }) { Text("Re-polish") }
                 }
-                if (note.audioPath != null) {
+                if (audioFile != null) {
                     OutlinedButton(enabled = !busy, onClick = { reprocess(retranscribe = true) }) {
                         Text(if (note.status == NoteStatus.FAILED) "Retry" else "Re-transcribe")
                     }

@@ -115,6 +115,25 @@ object DriveSync {
         Status.Synced(System.currentTimeMillis(), restored)
     }
 
+    /**
+     * Fetches a note's recording from Drive (e.g. its download failed during a restore).
+     * Returns null on success, or a message to show.
+     */
+    suspend fun downloadAudio(context: Context, noteId: String): String? {
+        val note = FlowNotesApp.instance.notes.get(noteId) ?: return "Note not found"
+        val audioId = note.driveAudioId ?: return "This note has no recording on Drive"
+        if (FlowNotesApp.instance.settings.current.googleAccount.isBlank()) return "Sign in with Google in Settings first"
+        return try {
+            val drive = client(context) ?: return "Sign in with Google again in Settings"
+            val target = File(File(context.filesDir, "recordings"), "${note.createdAt}-${note.id.take(8)}.m4a")
+            drive.downloadTo(audioId, target)
+            FlowNotesApp.instance.notes.modify(noteId) { it.copy(audioPath = target.absolutePath) }
+            null
+        } catch (e: Exception) {
+            e.message ?: "Download failed"
+        }
+    }
+
     /** First sign-in on a phone with no notes (e.g. a new phone): bring everything back, then sync. */
     suspend fun afterSignIn(context: Context) {
         if (FlowNotesApp.instance.notes.notes.value.isEmpty()) restore(context)

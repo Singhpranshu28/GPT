@@ -38,6 +38,8 @@ data class Settings(
     val copyToClipboard: Boolean = true,
     /** Google account notes are mirrored to (as Google Docs in a "Flow Notes" Drive folder). Blank = off. */
     val googleAccount: String = "",
+    /** Also upload the original recordings (about 0.5 MB per minute). */
+    val driveBackupAudio: Boolean = true,
 ) {
     val isConfigured get() = sttApiKey.isNotBlank()
 
@@ -72,6 +74,7 @@ class SettingsStore(context: Context) {
             .putInt("autoStopSilenceSec", s.autoStopSilenceSec)
             .putBoolean("copyToClipboard", s.copyToClipboard)
             .putString("googleAccount", s.googleAccount)
+            .putBoolean("driveBackupAudio", s.driveBackupAudio)
             .apply()
         _settings.value = s
     }
@@ -91,6 +94,7 @@ class SettingsStore(context: Context) {
             autoStopSilenceSec = prefs.getInt("autoStopSilenceSec", d.autoStopSilenceSec),
             copyToClipboard = prefs.getBoolean("copyToClipboard", d.copyToClipboard),
             googleAccount = prefs.getString("googleAccount", d.googleAccount)!!,
+            driveBackupAudio = prefs.getBoolean("driveBackupAudio", d.driveBackupAudio),
         )
     }
 

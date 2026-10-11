@@ -59,7 +59,17 @@ Keys are stored in the app's private storage on the device.
 
 ### Google Drive backup (optional)
 
-To back up notes, go to **Settings → Sign in with Google**. Each note is then saved as a **Google Doc** in a **"Flow Notes"** folder in your Drive and updated whenever you edit it. Deleting a note moves its Doc to the Drive trash. The app asks only for the `drive.file` permission, so it can see the files it created and nothing else in your Drive.
+To back up notes, go to **Settings → Sign in with Google**. For each note, Drive then holds:
+
+- a **Google Doc** in a **"Flow Notes"** folder, readable and searchable anywhere, and updated whenever you edit the note;
+- the **recording** in **"Flow Notes/Audio"** as `.m4a`. You can turn this off with *Back up recordings*;
+- a full JSON copy of the note (raw transcript, tags, timestamps, links to the Doc and audio) in the app's **hidden app-data folder** on Drive. Restore reads this copy.
+
+**Restore:** sign in on a new phone (or after reinstalling) with no notes, and everything comes back automatically, recordings included. You can also tap **Restore** at any time to pull in notes that aren't on the phone. Notes already on the phone are left alone.
+
+Deleting a note moves its Doc and recording to the Drive trash and removes its restore copy, so it won't come back on a restore.
+
+The app asks only for `drive.file` and `drive.appdata`. It can see the files it created and nothing else in your Drive.
 
 Google needs a one-time setup before sign-in works, because Google identifies Android apps by package name and signing key:
 
@@ -68,12 +78,12 @@ Google needs a one-time setup before sign-in works, because Google identifies An
 3. Open **Google Auth Platform**, or **OAuth consent screen** in the older layout:
    - Set the app type to **External** and fill in the app name and your email.
    - Under **Audience → Test users**, add the Gmail address you'll sign in with.
-   - Under **Data access**, add the scope `.../auth/drive.file`.
+   - Under **Data access**, add the scopes `.../auth/drive.file` and `.../auth/drive.appdata`.
 4. Go to **Clients → Create client → Android** and enter:
    - Package name: `com.flownotes`
    - SHA-1: `96:B3:DA:25:F6:33:17:37:1A:54:36:4A:EC:14:58:9B:6E:4C:AF:D7` (the fingerprint of `app/debug.keystore`, which signs every build)
 
-You don't need to copy any client ID into the app. Google matches the app by package name and SHA-1. While the consent screen is in **Testing** mode, Google may ask you to sign in again about once a week, and the app shows a **Sign in again** button when that happens. Publishing the consent screen avoids this, and `drive.file` doesn't require Google's app review. Audio goes only to the speech-to-text provider you configure, and the transcript goes only to Anthropic.
+You don't need to copy any client ID into the app. Google matches the app by package name and SHA-1. While the consent screen is in **Testing** mode, Google may ask you to sign in again about once a week, and the app shows a **Sign in again** button when that happens. Publishing the consent screen avoids this, and neither scope requires Google's app review. Audio goes only to the speech-to-text provider you configure, and the transcript goes only to Anthropic.
 
 ## Install on your phone
 
@@ -105,7 +115,7 @@ app/src/main/java/com/flownotes/
   audio/       AudioRecorder (16 kHz mono AAC, ~0.5 MB/min)
   ai/          Transcriber (OpenAI-compatible STT), Polisher (Claude), Prompts (the "flow" editing rules)
   data/        Note, NotesRepository (JSON file), SettingsStore
-  drive/       GoogleAuth (sign-in + drive.file consent), DriveClient (REST), DriveSync (notes → Google Docs)
+  drive/       GoogleAuth (sign-in + consent), DriveClient (REST), DriveSync (backup: Doc + audio + JSON, and restore)
 ```
 
 The editing behaviour lives in `ai/Prompts.kt`. Tweak it there to change how notes are written.

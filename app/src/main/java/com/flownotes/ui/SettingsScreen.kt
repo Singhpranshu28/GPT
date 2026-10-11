@@ -33,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -96,7 +97,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             HorizontalDivider()
-            GoogleDriveSection(s.googleAccount)
+            GoogleDriveSection(s.googleAccount, s.driveBackupAudio)
 
             HorizontalDivider()
             Section("Speech to text")
@@ -218,7 +219,7 @@ private fun Choice(title: String, description: String, selected: Boolean, onClic
 }
 
 @Composable
-private fun GoogleDriveSection(account: String) {
+private fun GoogleDriveSection(account: String, backupAudio: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val status by DriveSync.status.collectAsStateWithLifecycle()
@@ -227,7 +228,7 @@ private fun GoogleDriveSection(account: String) {
     fun signedIn(email: String?) {
         scope.launch {
             DriveSync.onSignedIn(email ?: "Google account")
-            DriveSync.syncAll(context)
+            DriveSync.afterSignIn(context)
         }
     }
 
@@ -256,19 +257,24 @@ private fun GoogleDriveSection(account: String) {
     Section("Google Drive backup")
     if (account.isBlank()) {
         Text(
-            "Sign in with Google to save every note as a Google Doc in a \"Flow Notes\" folder in your Drive. " +
+            "Sign in with Google to save every note as a Google Doc in a \"Flow Notes\" folder in your Drive, " +
+                "with its recording, and to restore your notes on a new phone. " +
                 "The app can only see files it creates, nothing else in your Drive.",
             style = MaterialTheme.typography.bodyMedium,
         )
         Button(onClick = ::signIn) { Text("Sign in with Google") }
     } else {
+        val busy = status == DriveSync.Status.Syncing || status is DriveSync.Status.Restoring
         Text("Signed in as $account", fontWeight = FontWeight.Medium)
         Text(
             when (val st = status) {
                 DriveSync.Status.Off, DriveSync.Status.Idle -> "Notes sync to Drive automatically."
                 DriveSync.Status.Syncing -> "Syncing…"
+                is DriveSync.Status.Restoring ->
+                    if (st.total == 0) "Looking for notes on Drive…" else "Restoring ${st.done + 1} of ${st.total}…"
                 is DriveSync.Status.Synced ->
-                    "Up to date · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(st.at))
+                    (if (st.restored > 0) "Restored ${st.restored} notes · " else "") +
+                        "Up to date · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(st.at))
                 DriveSync.Status.NeedsSignIn -> "Google needs you to sign in again."
                 is DriveSync.Status.Error -> "Last sync failed: ${st.message}"
             },
@@ -279,16 +285,26 @@ private fun GoogleDriveSection(account: String) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Back up recordings")
+                Text("Audio goes to Flow Notes/Audio, about 0.5 MB per minute.", style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(
+                checked = backupAudio,
+                onCheckedChange = { v -> FlowNotesApp.instance.settings.update { it.copy(driveBackupAudio = v) } },
+            )
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (status == DriveSync.Status.NeedsSignIn) {
                 Button(onClick = ::signIn) { Text("Sign in again") }
             } else {
-                OutlinedButton(
-                    enabled = status != DriveSync.Status.Syncing,
-                    onClick = { scope.launch { DriveSync.syncAll(context) } },
-                ) { Text("Sync now") }
+                OutlinedButton(enabled = !busy, onClick = { scope.launch { DriveSync.syncAll() } }) { Text("Sync now") }
+                OutlinedButton(enabled = !busy, onClick = { scope.launch { DriveSync.restore(context) } }) {
+                    Text("Restore")
+                }
             }
-            OutlinedButton(onClick = { DriveSync.signOut() }) { Text("Sign out") }
+            TextButton(onClick = { DriveSync.signOut() }) { Text("Sign out") }
         }
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }

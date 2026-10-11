@@ -20,11 +20,17 @@ data class Note(
     val error: String? = null,
     /** Google Doc this note is mirrored to, once synced. */
     val driveFileId: String? = null,
+    /** The recording, uploaded to the "Flow Notes/Audio" Drive folder. */
+    val driveAudioId: String? = null,
+    /** Full JSON copy of this note in the app's hidden Drive storage, used for restore. */
+    val driveMetaId: String? = null,
     /** [contentHash] at the time of the last successful Drive upload. */
     val driveSyncedHash: String? = null,
 ) {
-    val contentHash: String get() = (title + "\u0000" + body + "\u0000" + tags.joinToString(",")).hashCode().toString()
-    val needsDriveSync: Boolean get() = status == NoteStatus.READY && body.isNotBlank() && driveSyncedHash != contentHash
+    /** Everything that ends up on Drive; a change means the note has to be re-uploaded. */
+    val contentHash: String
+        get() = listOf(title, body, rawTranscript, tags.joinToString(","), style, durationMs.toString())
+            .joinToString("\u0000").hashCode().toString()
 }
 
 @Serializable

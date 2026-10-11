@@ -12,12 +12,14 @@ import kotlinx.coroutines.tasks.await
 /**
  * Google sign-in + Drive permission via Google Play services' AuthorizationClient.
  *
- * Only the `drive.file` scope is requested: the app can see and edit the files it creates
- * (the "Flow Notes" folder and its docs) and nothing else in the user's Drive.
+ * Only narrow scopes are requested: `drive.file` lets the app see and edit the files it creates
+ * (the "Flow Notes" folder, its Docs and audio) and nothing else in the user's Drive;
+ * `drive.appdata` is a hidden per-app folder used for the restore copies of notes.
  */
 object GoogleAuth {
     private val scopes = listOf(
         Scope("https://www.googleapis.com/auth/drive.file"),
+        Scope("https://www.googleapis.com/auth/drive.appdata"),
         Scope("email"),
     )
 

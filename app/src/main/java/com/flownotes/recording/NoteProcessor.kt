@@ -4,10 +4,13 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import com.flownotes.FlowNotesApp
+import com.flownotes.ai.LocalCleaner
 import com.flownotes.ai.Polisher
 import com.flownotes.ai.Transcriber
 import com.flownotes.data.Note
 import com.flownotes.data.NoteStatus
+import com.flownotes.data.SttEngine
+import com.flownotes.stt.WhisperEngine
 import java.io.File
 
 /** Audio file -> raw transcript -> polished note. Safe to re-run on a saved note (retry / re-polish). */
@@ -35,8 +38,14 @@ object NoteProcessor {
             val audio = note.audioPath?.let(::File)?.takeIf { it.exists() }
                 ?: return fail(note, "The audio for this note is no longer available.")
             onStage("Transcribing…")
-            val raw = runCatching { transcriber.transcribe(audio, settings) }
-                .getOrElse { return fail(note, it.message ?: "Transcription failed") }
+            val raw = runCatching {
+                when (settings.sttEngine) {
+                    SttEngine.ON_DEVICE -> WhisperEngine.transcribe(
+                        app, audio, settings.whisperModel, settings.language, settings.dictionary,
+                    ) { percent -> onStage("Transcribing on your phone… $percent%") }
+                    SttEngine.CLOUD -> transcriber.transcribe(audio, settings)
+                }
+            }.getOrElse { return fail(note, it.message ?: "Transcription failed") }
             note = note.copy(rawTranscript = raw).also { repo.upsert(it) }
         }
 
@@ -46,20 +55,22 @@ object NoteProcessor {
             return note
         }
 
-        // 2. Cleanup with Claude. Without a key (or if it fails) the raw transcript still becomes the note.
+        // 2. Clean-up: Claude when a key is set, otherwise the free on-device rules.
         if (settings.anthropicApiKey.isBlank()) {
+            val cleaned = LocalCleaner.clean(note.rawTranscript)
             note = note.copy(
-                title = fallbackTitle(note.rawTranscript),
-                body = note.rawTranscript,
+                title = LocalCleaner.title(cleaned),
+                body = cleaned,
+                style = settings.style.name,
                 status = NoteStatus.READY,
-                error = "Add an Anthropic API key in Settings to get cleaned-up text.",
+                error = null,
             )
         } else {
             onStage("Polishing…")
             note = runCatching { polisher.polish(note.rawTranscript, settings) }.fold(
                 onSuccess = { p ->
                     note.copy(
-                        title = p.title.ifBlank { fallbackTitle(note.rawTranscript) },
+                        title = p.title.ifBlank { LocalCleaner.title(p.body) },
                         body = p.body.trim(),
                         tags = p.tags.map { it.lowercase().trim() }.filter { it.isNotEmpty() }.distinct().take(3),
                         style = settings.style.name,
@@ -68,11 +79,12 @@ object NoteProcessor {
                     )
                 },
                 onFailure = { e ->
+                    val cleaned = LocalCleaner.clean(note.rawTranscript)
                     note.copy(
-                        title = note.title.ifBlank { fallbackTitle(note.rawTranscript) },
-                        body = note.body.ifBlank { note.rawTranscript },
+                        title = note.title.ifBlank { LocalCleaner.title(cleaned) },
+                        body = note.body.ifBlank { cleaned },
                         status = NoteStatus.READY,
-                        error = "Cleanup failed, showing the raw transcript. ${e.message.orEmpty()}".trim(),
+                        error = "Claude clean-up failed, used the basic offline clean-up instead. ${e.message.orEmpty()}".trim(),
                     )
                 },
             )
@@ -91,10 +103,6 @@ object NoteProcessor {
         FlowNotesApp.instance.notes.upsert(failed)
         return failed
     }
-
-    private fun fallbackTitle(text: String): String =
-        text.split(Regex("\\s+")).filter { it.isNotBlank() }.take(6).joinToString(" ")
-            .trimEnd('.', ',', '!', '?').ifBlank { "Voice note" }
 
     fun copy(context: Context, text: String) {
         val cm = context.getSystemService(ClipboardManager::class.java)

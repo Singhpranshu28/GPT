@@ -8,10 +8,10 @@ talk ("um, so the meeting is at 5, actually make that 6…")
 long-press again / volume key / tap ✓
         │
         ▼
-speech-to-text (OpenAI gpt-4o-transcribe, Groq Whisper, any OpenAI-compatible API)
+speech-to-text: Whisper on your phone (free, offline), or a cloud API
         │  raw: "um so the meeting is at 5 actually make that 6 and uh bring the deck"
         ▼
-Claude clean-up
+clean-up: free offline rules, or Claude for the full rewrite
         │  note: "The meeting is at 6pm. Bring the deck."
         ▼
 saved as a note (title + tags), copied to the clipboard
@@ -22,7 +22,7 @@ saved as a note (title + tags), copied to the clipboard
 | Wispr Flow | Flow Notes |
 |---|---|
 | Removes "um", "uh", "like", stutters and false starts | Same |
-| Backtracking: "5… actually 6pm" → "6pm" | Same: only the final intent is kept |
+| Backtracking: "5… actually 6pm" → "6pm" | Same, with Claude: only the final intent is kept |
 | Auto-formats lists, paragraphs and emails | Same, plus spoken commands ("new paragraph", "bullet point") |
 | Personal dictionary | One word per line. It is sent to both the speech-to-text model (as a spelling hint) and Claude |
 | Auto Cleanup levels (Light / Medium / High) | Same three levels |
@@ -50,10 +50,20 @@ Recording and processing run in a foreground service. You can switch apps or loc
 
 ## Setup
 
-You need two API keys, added in the app's Settings:
+**It works for free, with no API keys.** By default, speech is transcribed **on your phone** by [Whisper](https://github.com/openai/whisper), using [whisper.cpp](https://github.com/ggml-org/whisper.cpp). Nothing is uploaded and nothing costs money. To set it up, go to **Settings → Speech to text → On this phone (free)** and download a model once. Use Wi-Fi for the bigger ones.
 
-- **Speech to text** (required): an OpenAI key (default model `gpt-4o-transcribe`), or a Groq key (`whisper-large-v3-turbo`, faster and cheaper). Any OpenAI-compatible `/audio/transcriptions` endpoint works, including a self-hosted Whisper server.
-- **Anthropic** (for the clean-up): uses `claude-opus-5-5` by default, and you can change the model in Settings. Without this key, notes still save, but as raw transcripts.
+| Model | Size | Best for |
+|---|---|---|
+| Tiny | 31 MB | Older phones, quick notes |
+| Base (default) | 57 MB | Most phones: good balance of speed and accuracy |
+| Small | 181 MB | Best accuracy, especially for Hindi and Hinglish; about 3–4× slower than Base |
+
+All models are multilingual. Setting a **Language** (e.g. `hi`, `en`) makes recognition faster and more accurate than auto-detect. On a recent phone, Base transcribes a 1-minute note in roughly 5–15 seconds. Older phones take longer.
+
+Without an Anthropic key, notes get a **free, offline basic clean-up**. It removes "um/uh" and stutters, removes "you know"/"I mean" when used as fillers, drops the sentence before "scratch that", and turns spoken "new paragraph" and "bullet point" into formatting. The full Wispr-style rewrite (understanding self-corrections, reorganising into lists, smart titles and tags) needs Claude:
+
+- **Anthropic** (optional, paid per use): uses `claude-opus-5-5` by default, and you can change the model in Settings.
+- **Cloud speech-to-text** (optional): if your phone is slow, switch to **Cloud API** and use OpenAI (`gpt-4o-transcribe`), Groq (`whisper-large-v3-turbo`), or any OpenAI-compatible `/audio/transcriptions` endpoint.
 
 Keys are stored in the app's private storage on the device.
 
@@ -113,7 +123,9 @@ app/src/main/java/com/flownotes/
   ui/          RecordActivity (overlay), MainActivity, NotesScreen, NoteDetailScreen, SettingsScreen
   recording/   RecordingService (mic + pipeline in the foreground), NoteProcessor, RecordingBus
   audio/       AudioRecorder (16 kHz mono AAC, ~0.5 MB/min)
-  ai/          Transcriber (OpenAI-compatible STT), Polisher (Claude), Prompts (the "flow" editing rules)
+  stt/         WhisperEngine + WhisperNative (on-device whisper.cpp via JNI), WhisperModels (download), AudioDecoder
+  ../cpp/      CMake build of whisper.cpp (pinned) + whisper_jni.cpp
+  ai/          Transcriber (cloud STT), Polisher (Claude), Prompts (the "flow" editing rules), LocalCleaner (free offline clean-up)
   data/        Note, NotesRepository (JSON file), SettingsStore
   drive/       GoogleAuth (sign-in + consent), DriveClient (REST), DriveSync (backup: Doc + audio + JSON, and restore)
 ```

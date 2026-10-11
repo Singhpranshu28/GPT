@@ -24,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -52,10 +53,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flownotes.FlowNotesApp
 import com.flownotes.data.CleanupLevel
+import com.flownotes.data.SttEngine
 import com.flownotes.data.Settings
 import com.flownotes.data.WritingStyle
 import com.flownotes.drive.DriveSync
 import com.flownotes.drive.GoogleAuth
+import com.flownotes.stt.WhisperModel
+import com.flownotes.stt.WhisperModels
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -101,26 +105,42 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             HorizontalDivider()
             Section("Speech to text")
-            Text("Any OpenAI-compatible transcription API.", style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = s.sttBaseUrl == Settings.OPENAI_BASE_URL,
-                    onClick = { set { it.copy(sttBaseUrl = Settings.OPENAI_BASE_URL, sttModel = Settings.OPENAI_STT_MODEL) } },
-                    label = { Text("OpenAI") },
-                )
-                FilterChip(
-                    selected = s.sttBaseUrl == Settings.GROQ_BASE_URL,
-                    onClick = { set { it.copy(sttBaseUrl = Settings.GROQ_BASE_URL, sttModel = Settings.GROQ_STT_MODEL) } },
-                    label = { Text("Groq (fast, cheap)") },
-                )
+            SttEngine.entries.forEach { engine ->
+                Choice(engine.label, engine.description, s.sttEngine == engine) { set { it.copy(sttEngine = engine) } }
             }
-            SecretField("Transcription API key", s.sttApiKey) { v -> set { it.copy(sttApiKey = v) } }
-            TextSetting("Base URL", s.sttBaseUrl) { v -> set { it.copy(sttBaseUrl = v) } }
-            TextSetting("Model", s.sttModel) { v -> set { it.copy(sttModel = v) } }
+            if (s.sttEngine == SttEngine.ON_DEVICE) {
+                OnDeviceModels(s.whisperModel) { m -> set { it.copy(whisperModel = m) } }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = s.sttBaseUrl == Settings.OPENAI_BASE_URL,
+                        onClick = { set { it.copy(sttBaseUrl = Settings.OPENAI_BASE_URL, sttModel = Settings.OPENAI_STT_MODEL) } },
+                        label = { Text("OpenAI") },
+                    )
+                    FilterChip(
+                        selected = s.sttBaseUrl == Settings.GROQ_BASE_URL,
+                        onClick = { set { it.copy(sttBaseUrl = Settings.GROQ_BASE_URL, sttModel = Settings.GROQ_STT_MODEL) } },
+                        label = { Text("Groq") },
+                    )
+                }
+                SecretField("Transcription API key", s.sttApiKey) { v -> set { it.copy(sttApiKey = v) } }
+                TextSetting("Base URL", s.sttBaseUrl) { v -> set { it.copy(sttBaseUrl = v) } }
+                TextSetting("Model", s.sttModel) { v -> set { it.copy(sttModel = v) } }
+            }
             TextSetting("Language (optional, e.g. en, hi)", s.language) { v -> set { it.copy(language = v) } }
+            Text(
+                "Leave blank to auto-detect. Setting it (e.g. \"hi\" for Hindi) is faster and more accurate on-device.",
+                style = MaterialTheme.typography.bodySmall,
+            )
 
             HorizontalDivider()
-            Section("Clean-up with Claude")
+            Section("Clean-up with Claude (optional)")
+            Text(
+                "Without a key, notes get a free basic clean-up on the phone: fillers, stutters and " +
+                    "\"scratch that\" are removed and spoken \"new paragraph\" / \"bullet point\" are applied. " +
+                    "Claude adds the full Wispr-style rewrite (self-corrections, lists, titles, tags) and is paid per use.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             SecretField("Anthropic API key", s.anthropicApiKey) { v -> set { it.copy(anthropicApiKey = v) } }
             TextSetting("Claude model", s.claudeModel) { v -> set { it.copy(claudeModel = v) } }
 
@@ -308,4 +328,55 @@ private fun GoogleDriveSection(account: String, backupAudio: Boolean) {
         }
     }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+}
+
+@Composable
+private fun OnDeviceModels(selected: WhisperModel, onSelect: (WhisperModel) -> Unit) {
+    val context = LocalContext.current
+    val states by WhisperModels.states.collectAsStateWithLifecycle()
+
+    Text("Speech model", fontWeight = FontWeight.Medium)
+    WhisperModel.entries.forEach { model ->
+        val state = states[model] ?: WhisperModels.State.NotDownloaded
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected == model, onClick = { onSelect(model) })
+            Column(Modifier.weight(1f)) {
+                Text("${model.label} · ${model.sizeMb} MB")
+                Text(
+                    when (state) {
+                        is WhisperModels.State.Downloading -> "Downloading… ${state.percent}%"
+                        is WhisperModels.State.Failed -> state.message
+                        WhisperModels.State.Ready -> model.description + " · downloaded"
+                        WhisperModels.State.NotDownloaded -> model.description
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state is WhisperModels.State.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                if (state is WhisperModels.State.Downloading) {
+                    LinearProgressIndicator(
+                        progress = { state.percent / 100f },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+            }
+            when (state) {
+                WhisperModels.State.Ready ->
+                    TextButton(onClick = { WhisperModels.delete(context, model) }) { Text("Delete") }
+                is WhisperModels.State.Downloading -> Unit
+                else -> TextButton(onClick = {
+                    onSelect(model)
+                    // App scope: the download keeps going if you leave Settings.
+                    FlowNotesApp.instance.scope.launch { WhisperModels.download(context.applicationContext, model) }
+                }) { Text("Download") }
+            }
+        }
+    }
+    Text(
+        "Models download once over the internet, then everything runs offline. Use Wi-Fi for Small.",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }

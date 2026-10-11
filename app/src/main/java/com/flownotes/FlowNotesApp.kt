@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import com.flownotes.data.NotesRepository
 import com.flownotes.data.SettingsStore
 import com.flownotes.drive.DriveSync
+import com.flownotes.stt.WhisperModels
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,6 +33,7 @@ class FlowNotesApp : Application() {
         )
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
+        WhisperModels.refresh(this)
         DriveSync.start(this, scope)
     }
 

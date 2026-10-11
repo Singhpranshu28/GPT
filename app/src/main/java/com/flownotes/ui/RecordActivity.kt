@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.flownotes.FlowNotesApp
+import com.flownotes.data.setupProblem
 import com.flownotes.recording.NoteProcessor
 import com.flownotes.recording.RecordingBus
 import com.flownotes.recording.RecordingService
@@ -133,9 +134,10 @@ class RecordActivity : ComponentActivity() {
     }
 
     private fun startRecording() {
-        if (!FlowNotesApp.instance.settings.current.isConfigured) {
+        val problem = FlowNotesApp.instance.settings.current.setupProblem(this)
+        if (problem != null) {
             // The overlay shows a "Set up" prompt instead.
-            RecordingBus.setNeedsSetup()
+            RecordingBus.setNeedsSetup(problem)
             return
         }
         RecordingBus.clearNeedsSetup()
@@ -186,7 +188,7 @@ private fun RecordOverlay(
     onDismiss: () -> Unit,
 ) {
     val state by RecordingBus.state.collectAsStateWithLifecycle()
-    val needsSetup by RecordingBus.needsSetup.collectAsStateWithLifecycle()
+    val setupProblem by RecordingBus.needsSetup.collectAsStateWithLifecycle()
     val dismissible = state !is RecordingState.Recording && state !is RecordingState.Processing
 
     Box(
@@ -208,7 +210,7 @@ private fun RecordOverlay(
         ) {
             Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 when {
-                    needsSetup -> SetupPrompt(onSettings)
+                    setupProblem != null -> SetupPrompt(setupProblem!!, onSettings)
                     else -> when (val s = state) {
                         is RecordingState.Recording -> Recording(s, onStop, onCancel)
                         is RecordingState.Processing -> Processing(s.stage)
@@ -338,13 +340,10 @@ private fun Failed(state: RecordingState.Failed, onOpen: (String) -> Unit, onDis
 }
 
 @Composable
-private fun SetupPrompt(onSettings: () -> Unit) {
+private fun SetupPrompt(problem: String, onSettings: () -> Unit) {
     Text("Almost ready", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Add your speech-to-text API key (and an Anthropic key for the clean-up) to start recording notes.",
-        style = MaterialTheme.typography.bodyMedium,
-    )
+    Text(problem, style = MaterialTheme.typography.bodyMedium)
     Spacer(Modifier.height(16.dp))
     Button(onClick = onSettings) { Text("Open settings") }
 }

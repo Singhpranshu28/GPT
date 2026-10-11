@@ -17,19 +17,20 @@ object RecordingBus {
     private val _state = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = _state.asStateFlow()
 
-    private val _needsSetup = MutableStateFlow(false)
-    val needsSetup: StateFlow<Boolean> = _needsSetup.asStateFlow()
+    /** Non-null while the overlay should show a setup prompt instead of recording. */
+    private val _needsSetup = MutableStateFlow<String?>(null)
+    val needsSetup: StateFlow<String?> = _needsSetup.asStateFlow()
 
     internal fun set(state: RecordingState) {
         _state.value = state
-        if (state is RecordingState.Recording) _needsSetup.value = false
+        if (state is RecordingState.Recording) _needsSetup.value = null
     }
 
-    fun setNeedsSetup() {
-        _needsSetup.value = true
+    fun setNeedsSetup(problem: String) {
+        _needsSetup.value = problem
     }
 
     fun clearNeedsSetup() {
-        _needsSetup.value = false
+        _needsSetup.value = null
     }
 }
